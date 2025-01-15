@@ -8,7 +8,43 @@
 
 #include "./file.h"
 
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 4096
+
+int count_delims(const char* str, const char* delims)
+{
+    int amount = 0;
+
+    for (int i = 0; str[i] != '\0'; i++)
+    {
+        for (int j = 0; delims[j] != '\0'; j++)
+        {
+            if (str[i] == delims[j])
+            {
+                amount++;
+                break;
+            }
+        }
+    }
+
+    return amount;
+}
+
+void split(char* str, const char* delims, char** tokens)
+{
+    char* token = strtok(str, delims);
+    tokens[0] = token;
+    int i = 1;
+
+    while (token != NULL)
+    {
+        token = strtok(NULL, delims);
+        if (token != NULL)
+        {
+            tokens[i] = token;
+            i++;
+        }
+    }
+}
 
 int main()
 {
@@ -65,7 +101,31 @@ int main()
 
         printf("\n--request--\n\n%s\n^^request^^\n", buffer);
 
-        FILE* file = fopen("index.html", "r");
+        char* delims = " \n";
+        // int size = count_delims(buffer, delims) + 1;
+        // printf("delims counted: %s\n", size);
+        char** tokens = (char**)malloc(sizeof(char*) * 100);
+        split(buffer, delims, tokens);
+        printf("split done\n");
+
+        for (int i = 0; i < 100; i++)
+        {
+            printf("%d: %s\n", i, tokens[i]);
+        }
+
+        char* file_path = tokens[1];
+
+        if (!strcmp(file_path, "/"))
+            file_path = "index.html";
+
+        FILE* file = fopen(file_path, "r");
+
+        if (file == NULL)
+        {
+            printf("failed to open '%s'\n", file_path);
+            continue;
+        }
+
         int filesize = file_size(file);
         char* contents = (char*)malloc(sizeof(char) * filesize);
         bool is_valid = read_file(file, contents, filesize, filesize);
@@ -86,10 +146,11 @@ int main()
         response[seer + 1] = '\n';
         seer += 2;
         strncpy(response + seer, contents, filesize);
-        
-        printf("--response--\n\n%s\n^^response^^\n", response);
+
         write(new_socket, response, strlen(response));
-        
+        printf("--response sent--\n--%s--\n", file_path);
+
+        free(tokens);
         free(contents);
         free(content_length_str);
         free(response);
