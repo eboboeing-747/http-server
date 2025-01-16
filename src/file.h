@@ -8,4 +8,4 @@ int file_size(FILE* file);
 
 bool read_file(FILE* file, char* output, int file_size, int output_size);
 
-#endif
+#endif // FILE_H
