@@ -34,7 +34,7 @@ char* split_next(char* str, const char* delimeter)
         return NULL;
 
     char* end = strstr(str, delimeter);
-    
+
     if (end == NULL)
         return NULL;
 
@@ -85,7 +85,7 @@ struct request_uri validate_http_uri(char* uri_str, char* method, enum status_co
     struct request_uri uri;
     uri.uri = uri_str;
     *status = VALID;
-    
+
     if (!*uri_str)
     {
         *status = CE_400; // request-URI can never be empty
@@ -93,7 +93,7 @@ struct request_uri validate_http_uri(char* uri_str, char* method, enum status_co
         return uri;
     }
 
-    if (*uri_str == '*')
+    if (strcmp(uri_str, "*") == 0)
     {
         if (strcmp(method, "OPTIONS") == 0)
         {
@@ -102,7 +102,7 @@ struct request_uri validate_http_uri(char* uri_str, char* method, enum status_co
         }
         else
         {
-            *status = CE_400; // the only method campatible with request-URI = "*" is OPTIONS
+            *status = CE_405; // the only method campatible with request-URI = "*" is OPTIONS
             uri.type = asterisk;
             return uri;
         }
@@ -119,8 +119,15 @@ struct request_uri validate_http_uri(char* uri_str, char* method, enum status_co
         uri.type = abs_path; // if request-URI starts with "/"
         return uri;
     }
-
+    
+    // TODO: validate uri_str as authority
     uri.type = authority;
+    if (strcmp(method, "OPTIONS") != 0)
+    {
+        *status = CE_405; // the only method campatible with request-URI = authority is OPTIONS
+        return uri;
+    }
+
     return uri;
 }
 
@@ -156,6 +163,8 @@ bool isnumber(const char* number)
 struct http_version parse_http_version(char* version_str, enum status_code* status)
 {
     struct http_version version;
+    version.major = HTTP_MAJOR;
+    version.minor = HTTP_MINOR;
     *status = CE_400;
 
     char* major_str = split_next(version_str, "/");
@@ -181,7 +190,7 @@ enum status_code parse_request(char* request)
 
     if (message_body == NULL)
         return CE_400; // 400 Bad Request (failed to find '\r\n\r\n' in request)
-    
+
     struct str_arr tokens = split(request, "\r\n");
 
     if (tokens.size < 1)
@@ -193,7 +202,7 @@ enum status_code parse_request(char* request)
     // parse request line
     char* request_line_str = tokens.array[0];
     struct str_arr request_line_tokens = split(request_line_str, " ");
-    
+
     if (request_line_tokens.size != REQ_LINE_SIZE)
     {
         free(request_line_tokens.array);
@@ -246,23 +255,6 @@ int main()
 
     enum status_code status = parse_request(request);
     printf("%d", status);
-
-    /*char* message_body = split_request(request);
-
-    if (message_body == NULL)
-    {
-        printf("no request delimeter\nbad request");
-        return 0;
-    }
-
-    printf("'%s'\n\n'%s'\n", request, message_body);
-
-    struct str_arr tokens = split(request, "\r\n");
-
-    for (int i = 0; i < tokens.size; i++)
-        printf("%d: '%s'\n", i, tokens.array[i]);
-
-    free(tokens.array);*/
 
     return 0;
 }
