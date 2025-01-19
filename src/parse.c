@@ -28,6 +28,11 @@ size_t count_delims(const char* str, const char* delimeter)
     return amount;
 }
 
+void free(struct str_arr* str_array)
+{
+    free(str_array.array);
+}
+
 char* split_next(char* str, const char* delimeter)
 {
     if (!*str)
@@ -55,17 +60,21 @@ struct str_arr split(char* str, const char* delimeter)
     return tokens;
 }
 
-char* split_request(char* request)
+char* split_request(char* request, enum status_code* status)
 {
     const char* request_delimeter = "\r\n\r\n";
     char* message_body = strstr(request, request_delimeter);
 
     if (message_body == NULL)
+    {
+        *status = CE_400; // no "\r\n\r\n"
         return NULL;
+    }
 
     *message_body = '\0';
     message_body += strlen(request_delimeter);
 
+    *status = VALID;
     return message_body;
 }
 
@@ -184,68 +193,74 @@ struct http_version parse_http_version(char* version_str, enum status_code* stat
     return version;
 }
 
+struct request_line parse_request_line(struct str_arr* tokens, enum status_code* status)
+{
+    char* request_line_str = tokens->array[0];
+    struct str_arr request_line_tokens = split(request_line_str, " ");
+    struct request_line req_line;
+
+    if (request_line_tokens.size != REQ_LINE_SIZE)
+    {
+        *status = CE_400; // 400 Bad Request (invalid request line length)
+        free(*request_line_tokens);
+        return req_line;
+    }
+
+    *status = validate_http_method(request_line_tokens.array[0]);
+    if (status != VALID)
+    {
+        free(*request_line_tokens);
+        return req_line;
+    }
+    req_line.method = request_line_tokens.array[0];
+
+    struct request_uri uri = validate_http_uri(request_line_tokens.array[1], req_line.method, status);
+    if (*status != VALID)
+    {
+        free(*request_line_tokens);
+        return req_line;
+    }
+    req_line.uri = uri;
+
+    struct http_version version = parse_http_version(request_line_tokens.array[2], status);
+    if (*status != VALID)
+    {
+        free(*request_line_tokens);
+        return req_line;
+    }
+    req_line.version = version;
+
+    free(&request_line_tokens);
+    *status = VALID;
+    return req_line;
+}
+
 enum status_code parse_request(char* request)
 {
-    char* message_body = split_request(request);
+    enum status_code status;
 
-    if (message_body == NULL)
-        return CE_400; // 400 Bad Request (failed to find '\r\n\r\n' in request)
+    char* message_body = split_request(request, &status);
+    if (status != VALID)
+        return CE_400;
 
     struct str_arr tokens = split(request, "\r\n");
 
     if (tokens.size < 1)
     {
-        free(tokens.array);
+        free(&tokens);
         return CE_400; // 400 Bad Request (no header fields)
     }
 
-    // parse request line
-    char* request_line_str = tokens.array[0];
-    struct str_arr request_line_tokens = split(request_line_str, " ");
-
-    if (request_line_tokens.size != REQ_LINE_SIZE)
-    {
-        free(request_line_tokens.array);
-        free(tokens.array);
-        return CE_400; // 400 Bad Request (invalid request line length)
-    }
-
-    struct request_line req_line;
-    enum status_code status;
-
-    status = validate_http_method(request_line_tokens.array[0]);
+    struct request_line = parse_request_line(tokens, &status);
     if (status != VALID)
     {
-        free(request_line_tokens.array);
-        free(tokens.array);
+        free(&tokens);
         return status;
     }
-    req_line.method = request_line_tokens.array[0];
-
-    struct request_uri uri = validate_http_uri(request_line_tokens.array[1], req_line.method, &status);
-    if (status != VALID)
-    {
-        free(request_line_tokens.array);
-        free(tokens.array);
-        return status;
-    }
-    req_line.uri = uri;
-
-    struct http_version version = parse_http_version(request_line_tokens.array[2], &status);
-    if (status != VALID)
-    {
-        free(request_line_tokens.array);
-        free(tokens.array);
-        return status;
-    }
-    req_line.version = version;
-
-    free(request_line_tokens.array);
-    // end parse request line
 
     printf("method: '%s'\nrequest-URI: '%s', type: '%d'\nHTTP-version/'%d'.'%d'\n\n", req_line.method, req_line.uri.uri, req_line.uri.type, req_line.version.major, req_line.version.minor);
 
-    free(tokens.array);
+    free(&tokens);
     return VALID;
 }
 

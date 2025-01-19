@@ -10,6 +10,8 @@ struct str_arr
     size_t size;
 };
 
+void free(struct str_arr* str_array);
+
 #define HTTP_METHOD_AMOUNT 8
 const char* HTTP_METHODS[HTTP_METHOD_AMOUNT] = { "OPTIONS", "GET", "HEAD", "POST", "PUT", "DELETE", "TRACE", "CONNECT" };
 
@@ -101,6 +103,12 @@ struct request_line
     struct request_uri uri;
     struct http_version version;
 };
+
+struct header_field
+{
+    char* name;
+    char* value;
+}
 
 char* split_request(char* request);
 // returns char* to message-body, makes "\r\n\r\n" -> "\0\n\r\n"
