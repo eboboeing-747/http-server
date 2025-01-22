@@ -7,6 +7,7 @@
 #include <stdbool.h>
 
 #include "./file.h"
+#include "./parse.h"
 
 #define BUFFER_SIZE 1024
 
@@ -61,7 +62,12 @@ int main()
         {
             printf("no data to read\n");
         }
-        printf("\n--request--\n\n%s\n^^request^^\n", buffer);
+        printf("\n-- raw request --\n\n%s\n-- end raw request --\n", buffer);
+
+        enum status_code status;
+        struct request req = parse_request(buffer, &status);
+        if (status != VALID)
+            ; // send http-response 
 
         FILE* file = fopen("contents/index.html", "r");
 
@@ -95,14 +101,15 @@ int main()
         seer += 2;
 
         strncpy(response + seer, contents, filesize);
-        
+
         printf("--response--\n\n%s\n^^response^^\n", response);
         write(new_socket, response, strlen(response));
-        
+
         free(contents);
         free(content_length_str);
         free(response);
         close(new_socket);
     }
+
     return 0;
 }

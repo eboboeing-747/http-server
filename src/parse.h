@@ -10,10 +10,10 @@ struct str_arr
     size_t size;
 };
 
-void free(struct str_arr* str_array);
+void free_str_arr(struct str_arr* str_array);
 
 #define HTTP_METHOD_AMOUNT 8
-const char* HTTP_METHODS[HTTP_METHOD_AMOUNT] = { "OPTIONS", "GET", "HEAD", "POST", "PUT", "DELETE", "TRACE", "CONNECT" };
+static const char* HTTP_METHODS[HTTP_METHOD_AMOUNT] = { "OPTIONS", "GET", "HEAD", "POST", "PUT", "DELETE", "TRACE", "CONNECT" };
 
 enum status_code
 {
@@ -108,9 +108,22 @@ struct header_field
 {
     char* name;
     char* value;
-}
+};
 
-char* split_request(char* request);
+struct request
+{
+    struct request_line req_line;
+    struct header_field* fields;
+    size_t fields_size; // amount of header-fields not including request-line
+    const char* message_body;
+};
+
+void free_request(struct request* req);
+
+struct request parse_request(char* request_str, enum status_code* status);
+// return request_str read to struct request
+
+char* split_request(char* request, enum status_code* status);
 // returns char* to message-body, makes "\r\n\r\n" -> "\0\n\r\n"
 
 #endif // PARSE_H

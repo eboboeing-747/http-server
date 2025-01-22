@@ -28,9 +28,14 @@ size_t count_delims(const char* str, const char* delimeter)
     return amount;
 }
 
-void free(struct str_arr* str_array)
+void free_str_arr(struct str_arr* str_array)
 {
-    free(str_array.array);
+    free(str_array->array);
+}
+
+void free_request(struct request* req)
+{
+    free(req->fields);
 }
 
 char* split_next(char* str, const char* delimeter)
@@ -202,14 +207,14 @@ struct request_line parse_request_line(struct str_arr* tokens, enum status_code*
     if (request_line_tokens.size != REQ_LINE_SIZE)
     {
         *status = CE_400; // 400 Bad Request (invalid request line length)
-        free(*request_line_tokens);
+        free_str_arr(&request_line_tokens);
         return req_line;
     }
 
     *status = validate_http_method(request_line_tokens.array[0]);
-    if (status != VALID)
+    if (*status != VALID)
     {
-        free(*request_line_tokens);
+        free_str_arr(&request_line_tokens);
         return req_line;
     }
     req_line.method = request_line_tokens.array[0];
@@ -217,7 +222,7 @@ struct request_line parse_request_line(struct str_arr* tokens, enum status_code*
     struct request_uri uri = validate_http_uri(request_line_tokens.array[1], req_line.method, status);
     if (*status != VALID)
     {
-        free(*request_line_tokens);
+        free_str_arr(&request_line_tokens);
         return req_line;
     }
     req_line.uri = uri;
@@ -225,51 +230,90 @@ struct request_line parse_request_line(struct str_arr* tokens, enum status_code*
     struct http_version version = parse_http_version(request_line_tokens.array[2], status);
     if (*status != VALID)
     {
-        free(*request_line_tokens);
+        free_str_arr(&request_line_tokens);
         return req_line;
     }
     req_line.version = version;
 
-    free(&request_line_tokens);
+    free_str_arr(&request_line_tokens);
     *status = VALID;
     return req_line;
 }
 
-enum status_code parse_request(char* request)
+// gets red of leading and trailing whitespaces
+char* strip(char* str)
 {
-    enum status_code status;
+    while (*str == ' ')
+        str++;
 
-    char* message_body = split_request(request, &status);
-    if (status != VALID)
-        return CE_400;
+    char* end = str + strlen(str) - 1;
 
-    struct str_arr tokens = split(request, "\r\n");
+    while (*end == ' ')
+        end--;
+    end++;
+    *end = '\0';
+
+    return str;
+}
+
+struct header_field parse_header_field(char* field_str, enum status_code* status)
+{
+    struct header_field field;
+    *status = CE_400;
+    
+    if (!*field_str)
+        return field; // header_field is empty
+
+    field.name = field_str;
+    field.value = split_next(field_str, ":");
+    if (field.value == NULL)
+        return field; // no ":" delimiter in header-field
+    if (!*(field.value))
+        return field; // field-value is empty
+    
+    field.value = strip(field.value);
+    *status = VALID;
+    return field;
+}
+
+struct request parse_request(char* request_str, enum status_code* status)
+{
+    struct request req;
+
+    req.message_body = split_request(request_str, status);
+    if (*status != VALID)
+        return req;
+
+    struct str_arr tokens = split(request_str, "\r\n");
 
     if (tokens.size < 1)
     {
-        free(&tokens);
-        return CE_400; // 400 Bad Request (no header fields)
+        *status = CE_400; // Bad Request (no header fields)
+        free_str_arr(&tokens);
+        return req;
     }
 
-    struct request_line = parse_request_line(tokens, &status);
-    if (status != VALID)
+    req.req_line = parse_request_line(&tokens, status);
+    if (*status != VALID)
     {
-        free(&tokens);
-        return status;
+        free_str_arr(&tokens);
+        return req;
     }
 
-    printf("method: '%s'\nrequest-URI: '%s', type: '%d'\nHTTP-version/'%d'.'%d'\n\n", req_line.method, req_line.uri.uri, req_line.uri.type, req_line.version.major, req_line.version.minor);
+    // printf("method: '%s'\nrequest-URI: '%s', type: '%d'\nHTTP-version/'%d'.'%d'\n\n", req_line->method, req_line->uri.uri, req_line->uri.type, req_line->version.major, req_line->version.minor);
 
-    free(&tokens);
-    return VALID;
-}
+    // split other header fields separated with ":" and strip field-values
+    req.fields_size = tokens.size - 1;
+    req.fields = (struct header_field*)malloc(sizeof(struct header_field) * req.fields_size);
+    for (int i = 1; i < tokens.size; i++)
+    {
+        req.fields[i - 1] = parse_header_field(tokens.array[i], status);
 
-int main()
-{
-    char request[] = "GET /style.css HTTP/1.1\r\nHost: localhost:8080\r\nUser-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0\r\nAccept: text/css,*/*;q=0.1\r\nAccept-Language: en-US,en;q=0.5\r\nAccept-Encoding: gzip, deflate, br, zstd\r\nConnection: keep-alive\r\nReferer: http://localhost:8080/\r\nSec-Fetch-Dest: style\r\nSec-Fetch-Mode: no-cors\r\nSec-Fetch-Site: same-origin\r\nPriority: u=2\r\n\r\n";
+        if (*status != VALID)
+            return req;
+    }
 
-    enum status_code status = parse_request(request);
-    printf("%d", status);
-
-    return 0;
+    free_str_arr(&tokens);
+    *status = VALID;
+    return req;
 }
